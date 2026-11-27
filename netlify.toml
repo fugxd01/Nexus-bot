@@ -1,6 +1,7 @@
 [build]
-  command = "npm install --prefix apps/dashboard --legacy-peer-deps && npm run build --prefix apps/dashboard"
-  publish = "apps/dashboard/.next"
+  base = "apps/dashboard"
+  command = "npm install --legacy-peer-deps && npm run build"
+  publish = ".next"
 
 [build.environment]
   NODE_VERSION = "20"
