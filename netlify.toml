@@ -1,8 +1,11 @@
 [build]
   base = "apps/dashboard"
-  command = "npm install --legacy-peer-deps && npm run build"
+  command = "npm install --legacy-peer-deps && npm install @netlify/plugin-nextjs && npm run build"
   publish = ".next"
 
 [build.environment]
   NODE_VERSION = "20"
   NEXT_TELEMETRY_DISABLED = "1"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
