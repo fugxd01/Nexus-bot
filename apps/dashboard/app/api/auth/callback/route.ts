@@ -1,42 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server';
+const ADMINISTRATOR = BigInt(0x8);
+const MANAGE_GUILD = BigInt(0x20);
 export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const code = searchParams.get('code');
-  const error = searchParams.get('error');
-  if (error || !code) {
-    return NextResponse.redirect(new URL('/login?error=cancelled', req.url));
+  const sessionCookie = req.cookies.get('nexus_session');
+  if (!sessionCookie?.value) {
+    return NextResponse.json({ error: 'Not authenticated', guilds: [] }, { status: 401 });
   }
-  const clientId = process.env.DISCORD_CLIENT_ID || process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID || '';
-  const clientSecret = process.env.DISCORD_CLIENT_SECRET || '';
-  const redirectUri = process.env.DISCORD_REDIRECT_URI || '';
   try {
-    // 1. Exchange code for access token
-    const tokenRes = await fetch('https://discord.com/api/oauth2/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        client_id: clientId,
-        client_secret: clientSecret,
-        grant_type: 'authorization_code',
-        code,
-        redirect_uri: redirectUri
+    const session = JSON.parse(Buffer.from(sessionCookie.value, 'base64').toString('utf-8'));
+    const rawGuilds: any[] = Array.isArray(session.guilds) ? session.guilds : [];
+    // Filter only servers where user has Manage Server or Administrator
+    const manageable = rawGuilds
+      .filter((g) => {
+        try {
+          const perms = BigInt(g.permissions || '0');
+          return (perms & ADMINISTRATOR) !== 0n || (perms & MANAGE_GUILD) !== 0n;
+        } catch {
+          return g.owner === true;
+        }
       })
-    });
-    if (!tokenRes.ok) {
-      return NextResponse.redirect(new URL('/login?error=token_failed', req.url));
-    }
-    const tokenData = await tokenRes.json();
-    const { access_token } = tokenData;
-    // 2. Fetch user + guilds in parallel
-    const [userRes, guildsRes] = await Promise.all([
-      fetch('https://discord.com/api/users/@me', {
-        headers: { Authorization: `Bearer ${access_token}` }
-      }),
-      fetch('https://discord.com/api/users/@me/guilds', {
-        headers: { Authorization: `Bearer ${access_token}` }
-      })
-    ]);
-    const discordUser = await userRes.json();
-    const discordGuilds = await guildsRes.json();
-    // 3. Store session in cookie
-    const sessionPayload = {
+      .map((g) => ({
+        id: g.id,
+        name: g.name,
+        icon: g.icon || null,
+        owner: g.owner || false,
+        hasBot: false, // Will be enhanced when bot is online
+        permissions: g.permissions
+      }));
+    return NextResponse.json({ guilds: manageable });
+  } catch (err) {
+    return NextResponse.json({ error: 'Invalid session', guilds: [] }, { status: 401 });
+  }
+}
